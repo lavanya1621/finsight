@@ -20,7 +20,7 @@ Programming Language: Python
 
 Frontend: Streamlit
 
-Backend: LangChain (Ch, yFinance
+Backend: LangChain , Langgraph yFinance
 
-Data Processing: Pandas, Matplotlib
+Data Processing:  Matplotlib
 
