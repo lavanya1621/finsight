@@ -1,21 +1,22 @@
-FinSight: Get Your Financial Insights
-Overview
-FinSight is a user-friendly stock analysis app that simplifies market insights. Just enter a company name, and FinSight will fetch its stock data, analyze past trends using AI, and present easy-to-understand insights. With engaging visuals, even beginners can navigate the stock market and make informed investment decisions.
+# **FinSight: Get Your Financial Insights**  
 
-Features
-🔹 Stock Data Analysis – Fetches real-time stock data from Yahoo Finance, including current price, yearly change, and moving averages.
+## **Overview**  
+**FinSight** is a user-friendly stock analysis app that simplifies market insights. Just enter a company name, and **FinSight** will fetch its stock data, analyze past trends using AI, and present easy-to-understand insights. With engaging visuals, even beginners can navigate the stock market and make informed investment decisions.  
 
-🤖 AI-Powered Insights – Uses OpenAI's GPT-4o to generate clear, actionable stock insights.
+## **Features**  
 
-📊 Dynamic Stock Charts – Visualizes historical and recent stock performance with interactive charts.
+- **📊 Stock Data Analysis** – Fetches real-time stock data from **Yahoo Finance**, including current price, yearly change, and moving averages.  
+- **🤖 AI-Powered Insights** – Uses **OpenAI's GPT-4o** to generate clear, actionable stock insights.  
+- **📈 Dynamic Stock Charts** – Visualizes historical and recent stock performance with interactive charts.  
+- **🎨 Clean & Intuitive UI** – Designed for readability and user engagement.  
 
-🎨 Clean & Intuitive UI – Designed for readability and user engagement.
+## **Tech Stack**  
 
-Tech Stack
-🛠 Programming Language: Python
+- **🛠 Programming Language:** Python  
+- **💻 Frontend:** Streamlit  
+- **⚙️ Backend:** LangChain, LangGraph, yFinance  
+- **📊 Data Processing & Visualization:** Matplotlib  
 
-💻 Frontend: Streamlit
+---
 
-⚙️ Backend: LangChain, LangGraph, yFinance
-
-📈 Data Processing & Visualization: Matplotlib
+⭐ **Feel free to contribute, report issues, or give feedback!**  
