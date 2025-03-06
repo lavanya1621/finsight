@@ -1,264 +1,225 @@
-import os
-from dotenv import load_dotenv
+# app.py
 import streamlit as st
 import yfinance as yf
+from openai import OpenAI
+from langgraph.graph import StateGraph
+from typing import TypedDict, Annotated, Literal
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import datetime, timedelta
-import re
-from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 
-# Set up the page
-st.set_page_config(page_title="FINSIGHT", layout="wide")
-st.title("FINSIGHT:  See the Trends. Make the Move.")
-st.write("Enter any company. Uncover its stock story.")
+# Initialize OpenAI client safely
+api_key = os.getenv("OPENAI_API_KEY")
+try:
+    if not api_key and hasattr(st, "secrets"):
+        api_key = st.secrets.get("OPENAI_API_KEY")
+except Exception:
+    pass
 
-load_dotenv()
+if not api_key:
+    st.error("No OpenAI API key found. Please set the OPENAI_API_KEY environment variable or add it to your Streamlit secrets.")
+    st.stop()
 
-def get_api_key():
-    # First try to get from Streamlit secrets (for deployed app)
-    if "openai_api_key" in st.secrets:
-        return st.secrets["openai_api_key"]
-    # Then try to get from environment variables (for local development)
-    elif os.environ.get("OPENAI_API_KEY"):
-        return os.environ.get("OPENAI_API_KEY")
-    else:
-        st.error("OpenAI API key not found. Please set it in .env file or Streamlit secrets.")
-        st.stop()
-llm = ChatOpenAI(model="gpt-4o")
+client = OpenAI(api_key=api_key)
 
-# Agent 1: Company to Ticker Resolver
-def resolve_ticker(company_name):
-    prompt = f"""Given the company name "{company_name}", identify the most likely 
-    stock ticker symbol. Return ONLY the ticker symbol, nothing else. 
-    For example, if given "Apple", return "AAPL".
-    If you're unsure, make your best guess.
-    """
+# Define state types
+class AgentState(TypedDict):
+    company_name: str
+    ticker: str
+    financial_data: dict
+    recommendation: str
+    signal: Literal["GREEN", "YELLOW", "RED"]
+    insights: list
+
+# Agent 1: Company Name to Ticker
+def company_to_ticker(state: AgentState) -> AgentState:
+    company_name = state["company_name"]
     
-    response = llm.invoke([HumanMessage(content=prompt)])
-    ticker = response.content.strip().upper()
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": "You are a financial assistant. Your task is to convert a company name to its stock ticker symbol. Respond with ONLY the ticker symbol in uppercase."},
+            {"role": "user", "content": f"What is the stock ticker symbol for {company_name}?"}
+        ]
+    )
     
-    # Extract ticker using regex (looking for 1-5 capital letters)
-    ticker_match = re.search(r'\b[A-Z]{1,5}\b', ticker)
-    if ticker_match:
-        ticker = ticker_match.group(0)
+    ticker = response.choices[0].message.content.strip()
+    st.session_state.ticker = ticker  # Store in session state for display
     
-    return ticker
+    return {"company_name": company_name, "ticker": ticker}
 
-# Agent 2: Stock Data Analyzer
-def analyze_stock(ticker, company_name):
+# Agent 2: Financial Analysis
+def analyze_financials(state: AgentState) -> AgentState:
+    ticker = state["ticker"]
+    company_name = state["company_name"]
+    
     try:
-        # Get stock data
+        # Fetch data from yfinance
         stock = yf.Ticker(ticker)
-        company_info = stock.info
+        info = stock.info
         
-        # Get historical data for the past year
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)
-        hist_data = stock.history(start=start_date, end=end_date)
-        
-        if hist_data.empty:
-            return None, f"Could not find data for ticker {ticker}. This might not be a valid company"
-        
-        # Prepare data for our analysis
-        recent_price = hist_data['Close'].iloc[-1]
-        price_start = hist_data['Close'].iloc[0]
-        percent_change = ((recent_price - price_start) / price_start) * 100
-        
-        # Get company name from info if available, otherwise use the input name
-        company_full_name = company_info.get('longName', company_name)
-        
-        # Collect key metrics
-        data = {
-            "ticker": ticker,
-            "company_name": company_full_name,
-            "current_price": recent_price,
-            "yearly_change_percent": percent_change,
-            "historical_data": hist_data,
-            "market_cap": company_info.get('marketCap', 'Not available'),
-            "company_info": company_info
+        # Extract key financial metrics
+        financial_data = {
+            "currentPrice": info.get("currentPrice", 0),
+            "targetMeanPrice": info.get("targetMeanPrice", 0),
+            "recommendationMean": info.get("recommendationMean", 0),
+            "returnOnEquity": info.get("returnOnEquity", 0),
+            "debtToEquity": info.get("debtToEquity", 0),
+            "revenueGrowth": info.get("revenueGrowth", 0),
+            "earningsGrowth": info.get("earningsGrowth", 0),
+            "profitMargins": info.get("profitMargins", 0)
         }
         
-        return data, None
+        # Generate insights and recommendation using OpenAI
+        prompt = f"""
+        Analyze {company_name} ({ticker}) based on these financial metrics:
+        Current Price: ${financial_data['currentPrice']}
+        Target Price: ${financial_data['targetMeanPrice']}
+        Recommendation Mean (1-5, 1 is Strong Buy): {financial_data['recommendationMean']}
+        Return on Equity: {financial_data['returnOnEquity']*100 if financial_data['returnOnEquity'] else 'N/A'}%
+        Debt to Equity: {financial_data['debtToEquity'] if financial_data['debtToEquity'] else 'N/A'}
+        Revenue Growth: {financial_data['revenueGrowth']*100 if financial_data['revenueGrowth'] else 'N/A'}%
+        Earnings Growth: {financial_data['earningsGrowth']*100 if financial_data['earningsGrowth'] else 'N/A'}%
+        Profit Margins: {financial_data['profitMargins']*100 if financial_data['profitMargins'] else 'N/A'}%
+        
+        Provide exactly 4 key insights about this company's financial health. Make the insights such that a beginner investor can understand them.
+        Then give an investment recommendation as either GREEN (strong buy), YELLOW (cautious buy/hold), or RED (avoid).
+        Format your response as a JSON with two fields: "insights" (an array of 4 strings) and "signal" (either "GREEN", "YELLOW", or "RED").
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": "You are a financial advisor providing precise investment recommendations."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        analysis = eval(response.choices[0].message.content.strip())
+        
+        return {
+            "company_name": company_name,
+            "ticker": ticker,
+            "financial_data": financial_data,
+            "insights": analysis["insights"],
+            "signal": analysis["signal"]
+        }
     
     except Exception as e:
-        return None, f"Error retrieving data: {str(e)}"
+        return {
+            "company_name": company_name,
+            "ticker": ticker,
+            "financial_data": {},
+            "insights": ["Error fetching financial data."],
+            "signal": "YELLOW"
+        }
 
-# Function to generate insights based on stock data
-def generate_insights(data):
-    company_name = data['company_name']
-    ticker = data['ticker']
-    current_price = data['current_price']
-    yearly_change = data['yearly_change_percent']
-    hist_data = data['historical_data']
+# Function to get stock price history and create visualizations
+def get_stock_history(ticker):
+    end_date = datetime.now()
     
-    # Calculate some simple metrics
-    recent_50day_avg = hist_data['Close'][-50:].mean()
-    recent_200day_avg = hist_data['Close'][-200:].mean() if len(hist_data) >= 200 else hist_data['Close'].mean()
+    # 12-month data
+    start_date_12m = end_date - timedelta(days=365)
+    data_12m = yf.download(ticker, start=start_date_12m, end=end_date)
     
-    # Monthly performance
-    monthly_change = ((hist_data['Close'].iloc[-1] - hist_data['Close'].iloc[-30]) / hist_data['Close'].iloc[-30]) * 100 if len(hist_data) > 30 else 0
+    # 3-month data
+    start_date_3m = end_date - timedelta(days=90)
+    data_3m = yf.download(ticker, start=start_date_3m, end=end_date)
     
-    # Prepare prompt for insights
-    prompt = f"""
-    I need simple, easy-to-understand insights about {company_name} ({ticker}) stock for a non-financial person.
+    return data_12m, data_3m
+
+# Function to plot stock prices
+def plot_stock_charts(data_12m, data_3m, ticker):
+    # Create 12-month chart
+    fig_12m, ax_12m = plt.subplots(figsize=(10, 6))
+    ax_12m.plot(data_12m['Close'])
+    ax_12m.set_title(f'{ticker} - 12 Month Stock Price')
+    ax_12m.set_ylabel('Price (USD)')
+    ax_12m.grid(True)
+    st.pyplot(fig_12m)
     
-    Here's the relevant data:
-    - Current stock price: ${current_price:.2f}
-    - 1-year change: {yearly_change:.2f}%
-    - 1-month change: {monthly_change:.2f}%
-    - 50-day average price: ${recent_50day_avg:.2f}
-    - 200-day average price: ${recent_200day_avg:.2f}
-    - Market cap: {data['market_cap']}
+    # Create 3-month chart
+    fig_3m, ax_3m = plt.subplots(figsize=(10, 6))
+    ax_3m.plot(data_3m['Close'])
+    ax_3m.set_title(f'{ticker} - 3 Month Stock Price')
+    ax_3m.set_ylabel('Price (USD)')
+    ax_3m.grid(True)
+    st.pyplot(fig_3m)
+
+# Build the graph
+def build_graph():
+    graph = StateGraph(AgentState)
     
-    Please provide 3-4 insights that would help someone understand if this stock might be a good investment.
-    Focus on:
-
-    1.How the stock has been performing recently
-    2.The overall trend (going up or down)
-    3.Any notable patterns
-    4.A simple recommendation (consider buying, maybe wait, or avoid for now)
+    # Add nodes
+    graph.add_node("company_to_ticker", company_to_ticker)
+    graph.add_node("analyze_financials", analyze_financials)
     
-
-    Avoid financial jargon. Write like you're explaining to a friend with no financial background.
-    Add a one-sentence summary that captures the overall investment potential in plain language. Is this closer to a strong opportunity, proceed with caution, or not recommended?. 
-    Be formal with your language and make it engaging for users to read.
-    End with a simple FACT about the company that might surprise people.
-
+    # Add edges
+    graph.set_entry_point("company_to_ticker")
+    graph.add_edge("company_to_ticker", "analyze_financials")
+    graph.set_finish_point("analyze_financials")
     
-    IMPORTANT: Do not use any special formatting, markdown, or symbols that might cause rendering issues.
-    Use simple text formatting only. Use regular spaces between words. Avoid using asterisks, underscores, or other markdown formatting.
-    """
+    return graph.compile()
+
+# Streamlit UI
+st.title("FinSight - See the Trends. Make the Move.")
+
+with st.form("company_form"):
+    company_name = st.text_input("Enter a company name:")
+    submitted = st.form_submit_button("Analyze")
     
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return response.content
-
-# Function to format figure axes for better date display
-def format_date_axis(fig, ax):
-    # Rotate date labels and set them to appear monthly
-    fig.autofmt_xdate()
-    ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-    plt.tight_layout()
-    return fig, ax
-
-# Define a function to apply FINSIGHT styling to charts
-def apply_finsight_style(fig, ax, title, y_label):
-    # Set background color
-    ax.set_facecolor('#f0f2f6')
-    fig.set_facecolor('#ffffff')
-    
-    # Set grid style
-    ax.grid(True, linestyle='--', alpha=0.7)
-    
-    # Set title and labels with better styling
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
-    ax.set_ylabel(y_label, fontsize=12)
-    
-    # Set spines (borders)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_alpha(0.5)
-    ax.spines['bottom'].set_alpha(0.5)
-    
-    return fig, ax
-
-# Custom CSS to improve the app appearance
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1E3A8A;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #1E3A8A;
-    }
-    .stock-price {
-        font-size: 2rem;
-        font-weight: bold;
-        color: #1E3A8A;
-    }
-    .insights-header {
-        color: #1E3A8A;
-        font-size: 1.8rem;
-        margin-top: 2rem;
-    }
-    .disclaimer {
-        font-size: 0.8rem;
-        color: #888888;
-        font-style: italic;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-
-
-
-
-# Streamlit interface
-company_name = st.text_input("Enter a company name:", "")
-
-if company_name:
-    with st.spinner(f"Finding ticker for {company_name}..."):
-        # Step 1: Resolve ticker using Agent 1
-        ticker = resolve_ticker(company_name)
+    if submitted and company_name:
+        # Initialize and run the graph
+        workflow = build_graph()
+        result = workflow.invoke({"company_name": company_name})
         
-        if ticker:
-            st.info(f"Found the ticker for your company :) {ticker}")
+        # Display results
+        st.subheader(f"{result['company_name']} ({result['ticker']})")
+        
+        # Display signal with appropriate color
+        signal_color = {
+            "GREEN": "green",
+            "YELLOW": "orange",
+            "RED": "red"
+        }
+        
+        st.markdown(f"### Investment Signal: <span style='color:{signal_color[result['signal']]}'>{result['signal']}</span>", unsafe_allow_html=True)
+        
+        # Display insights
+        st.subheader("Key Insights:")
+        for i, insight in enumerate(result['insights'], 1):
+            st.write(f"{i}. {insight}")
+        
+        # Display financial metrics
+        if result['financial_data']:
+            st.subheader("Financial Metrics:")
+            col1, col2 = st.columns(2)
             
-            # Step 2: Analyze stock data using Agent 2
-            with st.spinner(f"Looking into {ticker}..."):
-                data, error = analyze_stock(ticker, company_name)
+            with col1:
+                st.metric("Current Price", f"${result['financial_data']['currentPrice']}")
+                st.metric("Target Price", f"${result['financial_data']['targetMeanPrice']}")
+                st.metric("ROE", f"{result['financial_data']['returnOnEquity']*100 if result['financial_data']['returnOnEquity'] else 'N/A'}%")
+                st.metric("Profit Margin", f"{result['financial_data']['profitMargins']*100 if result['financial_data']['profitMargins'] else 'N/A'}%")
+            
+            with col2:
+                st.metric("Debt to Equity", result['financial_data']['debtToEquity'])
+                st.metric("Revenue Growth", f"{result['financial_data']['revenueGrowth']*100 if result['financial_data']['revenueGrowth'] else 'N/A'}%")
+                st.metric("Earnings Growth", f"{result['financial_data']['earningsGrowth']*100 if result['financial_data']['earningsGrowth'] else 'N/A'}%")
+                rec_mean = result['financial_data']['recommendationMean']
+                st.metric("Analyst Rating", f"{rec_mean}/5 (1 is Strong Buy)")
+        
+        # Display stock price charts
+        st.subheader("Stock Price History")
+        
+        with st.spinner("Loading stock price data..."):
+            try:
+                # Get stock price data
+                data_12m, data_3m = get_stock_history(result['ticker'])
                 
-                if error:
-                    st.error(error)
-                elif data:
-                    # Display basic info
-                    st.header(f"{data['company_name']} ({ticker})")
-                    st.markdown(f'<p class="stock-price">Current price: ${data["current_price"]:.2f}</p>', unsafe_allow_html=True)
-                    
-                    yearly_change = data['yearly_change_percent']
-                    change_color = "green" if yearly_change > 0 else "red"
-                    st.markdown(f"<p style='color:{change_color};'>Year change: {yearly_change:.2f}%</p>", unsafe_allow_html=True)
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    #Chart 1
-                    with col1:
-                        st.subheader("The Big Picture")
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.plot(data['historical_data'].index, data['historical_data']['Close'], color='#1E3A8A', linewidth=2)
-                        fig, ax = apply_finsight_style(fig, ax, f"{ticker} - Past 12 Months Journey", "Price ($)")
-                        fig, ax = format_date_axis(fig, ax)
-                        st.pyplot(fig)
-                    
-                    #Chart 2
-                    with col2:
-                        st.subheader("Recent Story")
-                        recent_data = data['historical_data'].iloc[-90:]
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.plot(recent_data.index, recent_data['Close'], color='#4338CA', linewidth=2)
-                        fig, ax = apply_finsight_style(fig, ax, f"{ticker} - Last 5 Months Trend", "Price ($)")
-                        fig, ax = format_date_axis(fig, ax)
-                        st.pyplot(fig)
-                    
-                    #Chart 3
-                    st.subheader(" Trading Activity")
-                    fig, ax = plt.subplots(figsize=(10, 4))
-                    ax.bar(data['historical_data'].index, data['historical_data']['Volume'], color='#3B82F6', alpha=0.7)
-                    fig, ax = apply_finsight_style(fig, ax, f"{ticker} - Trading Activity", "Volume")
-                    fig, ax = format_date_axis(fig, ax)
-                    st.pyplot(fig)
-                    
-                    # Generate insights
-                    st.markdown('<p class="insights-header">✨ Your Finsights</p>', unsafe_allow_html=True)
-                    with st.spinner("getting you your finsights...."):
-                        insights = generate_insights(data)
-                        st.write(insights)
-                    
-                    
-                   
-        else:
-            st.error("Could not determine a ticker symbol for that company name.")
+                # Plot the charts
+                plot_stock_charts(data_12m, data_3m, result['ticker'])
+                
+            except Exception as e:
+                st.error(f"Error loading stock data: {str(e)}")
