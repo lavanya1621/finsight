@@ -13,18 +13,5 @@ graph TD;
     E --> F[Display Data & Charts on Streamlit];
 
 
-## **Features**  
-
-- **📊 Stock Data Analysis** – Fetches real-time stock data from **Yahoo Finance**, including current price, yearly change, and moving averages.  
-- **🤖 AI-Powered Insights** – Uses **OpenAI's GPT-4o** to generate clear, actionable stock insights.  
-- **📈 Dynamic Stock Charts** – Visualizes historical and recent stock performance with interactive charts.  
-- **🎨 Clean & Intuitive UI** – Designed for readability and user engagement.  
-
-## **Tech Stack**  
-
-- **🛠 Programming Language:** Python  
-- **💻 Frontend:** Streamlit  
-- **⚙️ Backend:** LangChain, LangGraph, yFinance  
-- **📊 Data Processing & Visualization:** Matplotlib  
 
 
