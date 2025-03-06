@@ -1,26 +1,21 @@
-##FinSight: Get your financial insights
+FinSight: Get Your Financial Insights
+Overview
+FinSight is a user-friendly stock analysis app that simplifies market insights. Just enter a company name, and FinSight will fetch its stock data, analyze past trends using AI, and present easy-to-understand insights. With engaging visuals, even beginners can navigate the stock market and make informed investment decisions.
 
-#Overview
+Features
+🔹 Stock Data Analysis – Fetches real-time stock data from Yahoo Finance, including current price, yearly change, and moving averages.
 
-FinSight is a simple and easy-to-use stock analysis app. Just enter a company name, and FinSight will find its stock, analyze past trends using AI, and show clear, easy-to-understand insights. With engaging visuals, even beginners can make sense of the stock market and make smarter investment decisions..
+🤖 AI-Powered Insights – Uses OpenAI's GPT-4o to generate clear, actionable stock insights.
 
-#Features
+📊 Dynamic Stock Charts – Visualizes historical and recent stock performance with interactive charts.
 
-Stock Data Analysis: Fetches stock data from Yahoo Finance, including current price, yearly change, and moving averages.
+🎨 Clean & Intuitive UI – Designed for readability and user engagement.
 
-AI-Powered Insights: Generates simple, clear, and actionable stock insights using OpenAI's GPT-4o model.
+Tech Stack
+🛠 Programming Language: Python
 
-Dynamic Stock Charts: Displays historical and recent stock performance with interactive charts.
+💻 Frontend: Streamlit
 
-Clean UI: Aesthetic design with a focus on readability and user engagement.
+⚙️ Backend: LangChain, LangGraph, yFinance
 
-#Tech Stack
-
-Programming Language: Python
-
-Frontend: Streamlit
-
-Backend: LangChain , Langgraph yFinance
-
-Data Processing:  Matplotlib
-
+📈 Data Processing & Visualization: Matplotlib
