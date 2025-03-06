@@ -11,6 +11,7 @@ graph TD;
     D --> E[Generate Insights & Investment Signal];
     E --> F[Display Data & Charts on Streamlit];
 
+
 ## **Features**  
 
 - **📊 Stock Data Analysis** – Fetches real-time stock data from **Yahoo Finance**, including current price, yearly change, and moving averages.  
