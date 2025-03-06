@@ -26,6 +26,4 @@ graph TD;
 - **⚙️ Backend:** LangChain, LangGraph, yFinance  
 - **📊 Data Processing & Visualization:** Matplotlib  
 
----
 
-⭐ **Feel free to contribute, report issues, or give feedback!**  
